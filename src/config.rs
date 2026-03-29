@@ -6,6 +6,7 @@ use serde::Deserialize;
 pub struct Config {
     pub tuning_width: f32,
     pub white_noise_vol: f32,
+    pub white_noise_sample_rate: u32,
     pub station_vol: f32,
     pub stations: Vec<Station>,
 }
@@ -44,6 +45,7 @@ mod tests {
         let raw_config = r#"
             tuning_width = 0.05
             white_noise_vol = 0.3
+            white_noise_sample_rate = 48000
             station_vol = 1.0
 
             [[stations]]
@@ -80,6 +82,7 @@ mod tests {
         let config = Config {
             tuning_width: 0.1,
             white_noise_vol: 0.3,
+            white_noise_sample_rate: 48_000,
             station_vol: 1.0,
             stations: vec![
                 Station {
