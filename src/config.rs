@@ -10,9 +10,29 @@ pub struct Config {
     pub stations: Vec<Station>,
 }
 
+fn validate_config(config: &Config) -> Result<()> {
+    // No two stations can overlap more than the tuning_width
+    let mut frequencies: Vec<_> = config.stations.iter().map(|c| c.frequency).collect();
+    frequencies.sort_by(|a, b| a.total_cmp(b));
+    for (left, right) in frequencies.windows(2).map(|w| (w[0], w[1])) {
+        if left + config.tuning_width > right {
+            anyhow::bail!("Two stations can't overlap more than the tuning width");
+        }
+    }
+    Ok(())
+}
+
+fn parse_config(raw: &str) -> Result<Config> {
+    let config = toml::from_str(raw)?;
+
+    validate_config(&config)?;
+
+    Ok(config)
+}
+
 pub fn load_config(path: &str) -> Result<Config> {
     let raw_config = std::fs::read_to_string(path)?;
-    Ok(toml::from_str(&raw_config)?)
+    parse_config(&raw_config)
 }
 
 #[cfg(test)]
@@ -20,7 +40,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_valid_config() {
+    fn parse_config_valid() {
         let raw_config = r#"
             tuning_width = 0.05
             white_noise_vol = 0.3
@@ -39,7 +59,7 @@ mod tests {
             duration = 10.0
         "#;
 
-        let config: Config = toml::from_str(raw_config).unwrap();
+        let config: Config = parse_config(raw_config).unwrap();
         assert_eq!(config.stations.len(), 2);
 
         assert_eq!(config.stations[0].name, "Foo");
@@ -53,5 +73,37 @@ mod tests {
         assert_eq!(config.tuning_width, 0.05);
         assert_eq!(config.white_noise_vol, 0.3);
         assert_eq!(config.station_vol, 1.0);
+    }
+
+    #[test]
+    fn validate_config_frequencies_overlap_too_much() {
+        let config = Config {
+            tuning_width: 0.1,
+            white_noise_vol: 0.3,
+            station_vol: 1.0,
+            stations: vec![
+                Station {
+                    name: "Foo".into(),
+                    frequency: 0.1,
+                    path: "".into(),
+                    duration: 100.,
+                },
+                Station {
+                    name: "bar".into(),
+                    frequency: 0.19,
+                    path: "".into(),
+                    duration: 100.,
+                },
+            ],
+        };
+
+        let validation_res = validate_config(&config);
+        assert!(validation_res.is_err());
+        assert!(
+            validation_res
+                .unwrap_err()
+                .to_string()
+                .contains("Two stations can't overlap more than the tuning width")
+        );
     }
 }
