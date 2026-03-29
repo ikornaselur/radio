@@ -24,6 +24,7 @@ pub struct Station {
 struct StationPlayer {
     station: Station,
     player: Option<Player>,
+    inactive: Option<Instant>,
 }
 
 pub struct StationManager {
@@ -58,6 +59,7 @@ impl StationManager {
                 .map(|station| StationPlayer {
                     station,
                     player: None,
+                    inactive: None,
                 })
                 .collect(),
             dial: 0.0,
@@ -73,12 +75,12 @@ impl StationManager {
     pub fn tick(&mut self, dial: f32) -> Result<()> {
         if self.dial != dial {
             self.dial = dial;
-            println!("Tick: {dial}");
 
             let active_station_players = self.load_stations()?;
             self.update_volumes(&active_station_players)?;
-            self.unload_stations()?;
         }
+        // Always unload stations
+        self.unload_stations()?;
 
         // Sleep until next tick
         let sleep_time = self.tick_interval.saturating_sub(self.last_tick.elapsed());
@@ -106,7 +108,16 @@ impl StationManager {
 
             // A station is only active if it's within two tuning widths
             if distance > self.tuning_width * STATION_TUNING_WIDTH_BUFFER {
+                if sp.player.is_some() && sp.inactive.is_none() {
+                    // Just became inactive, so we'll set the flag for cleanup
+                    println!("{} became inactive, flagging for cleanup", sp.station.name);
+                    sp.inactive = Some(Instant::now());
+                }
                 continue;
+            }
+            // Station has become active again, so we'll remove the flag
+            if sp.inactive.is_some() {
+                sp.inactive = None;
             }
 
             active_stations.push(idx);
@@ -114,6 +125,7 @@ impl StationManager {
             if sp.player.is_some() {
                 continue;
             }
+            println!("Loading {}", sp.station.name);
 
             let player = Player::connect_new(self.sink.mixer());
             player.set_volume(0.0);
@@ -133,7 +145,16 @@ impl StationManager {
     /// If a loaded station is outside the `STATION_TUNING_WIDTH_BUFFER` * `tuning_width`, then we
     /// start unloading them. To prevent thrashing if you move the dial quickly back and forth we
     /// keep stations in memory for `UNLOAD_STATION_BUFFER_S` seconds.
-    fn unload_stations(&self) -> Result<()> {
+    fn unload_stations(&mut self) -> Result<()> {
+        for sp in &mut self.station_players {
+            if let Some(instant) = sp.inactive
+                && instant.elapsed() > Duration::from_secs_f32(UNLOAD_STATION_BUFFER_S)
+            {
+                println!("Cleaning up {}", sp.station.name);
+                sp.player = None;
+                sp.inactive = None;
+            }
+        }
         Ok(())
     }
 
@@ -170,8 +191,6 @@ impl StationManager {
             player.set_volume(station_vol);
             white_noise_vol = white_noise_vol.min(noise_vol);
 
-            println!("[{}] Volume: {station_vol}", sp.station.name);
-
             if player.empty() {
                 let file = BufReader::new(File::open(&sp.station.path)?);
                 let source = Decoder::try_from(file)?;
@@ -184,9 +203,4 @@ impl StationManager {
 
         Ok(())
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
