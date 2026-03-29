@@ -39,7 +39,8 @@ fn main() -> Result<()> {
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
-        .as_secs_f32();
+        .as_secs_f64();
+    println!("Now: {now}");
 
     for station in stations.iter() {
         let player = Player::connect_new(handle.mixer());
@@ -47,7 +48,7 @@ fn main() -> Result<()> {
         let file = BufReader::new(File::open(&station.path)?);
         let mut source = Decoder::try_from(file)?;
         let offset = now % station.duration;
-        source.try_seek(Duration::from_secs_f32(offset))?;
+        source.try_seek(Duration::from_secs_f64(offset))?;
         player.append(source);
         players.push(player);
         println!("Offsetting {}: {:?}", station.path, offset);
