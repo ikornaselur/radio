@@ -11,6 +11,7 @@ use std::{
 use crate::Config;
 
 const UNLOAD_STATION_BUFFER_S: f32 = 5.0;
+const STATION_TUNING_WIDTH_BUFFER: f32 = 1.1;
 
 #[derive(Deserialize, Clone)]
 pub struct Station {
@@ -90,7 +91,7 @@ impl StationManager {
     /// Load stations
     ///
     /// Based on the current dial, we load stations that were not previously loaded if they are
-    /// within 2x the tuning width
+    /// within `STATION_TUNING_WIDTH_BUFFER` * `tuning_width`
     ///
     /// This lets us keep adjacent stations ready to play if the dial is turned towards them.
     fn load_stations(&mut self) -> Result<Vec<usize>> {
@@ -100,20 +101,28 @@ impl StationManager {
 
         let mut active_stations = vec![];
 
-        for (idx, station_player) in self.station_players.iter_mut().enumerate() {
-            // TODO: Right now all stations are just active
-            active_stations.push(idx);
-            if station_player.player.is_some() {
+        for (idx, sp) in self.station_players.iter_mut().enumerate() {
+            let distance = (self.dial - sp.station.frequency).abs();
+
+            // A station is only active if it's within two tuning widths
+            if distance > self.tuning_width * STATION_TUNING_WIDTH_BUFFER {
                 continue;
             }
+
+            active_stations.push(idx);
+            // If we're already loaded, we just continue
+            if sp.player.is_some() {
+                continue;
+            }
+
             let player = Player::connect_new(self.sink.mixer());
             player.set_volume(0.0);
-            let file = BufReader::new(File::open(&station_player.station.path)?);
+            let file = BufReader::new(File::open(&sp.station.path)?);
             let mut source = Decoder::try_from(file)?;
-            let offset = now % station_player.station.duration;
+            let offset = now % sp.station.duration;
             source.try_seek(Duration::from_secs_f64(offset))?;
             player.append(source);
-            station_player.player = Some(player);
+            sp.player = Some(player);
         }
 
         Ok(active_stations)
@@ -121,9 +130,9 @@ impl StationManager {
 
     /// Unload stations
     ///
-    /// If a loaded station is outside the 2x tuning width, then we start unloading them. To
-    /// prevent thrashing if you move the dial quickly back and forth we keep stations in memory for
-    /// `UNLOAD_STATION_BUFFER_S` seconds.
+    /// If a loaded station is outside the `STATION_TUNING_WIDTH_BUFFER` * `tuning_width`, then we
+    /// start unloading them. To prevent thrashing if you move the dial quickly back and forth we
+    /// keep stations in memory for `UNLOAD_STATION_BUFFER_S` seconds.
     fn unload_stations(&self) -> Result<()> {
         Ok(())
     }
@@ -150,6 +159,8 @@ impl StationManager {
 
             player.set_volume(station_vol);
             white_noise_vol = white_noise_vol.min(noise_vol);
+
+            println!("[{}] Volume: {station_vol}", sp.station.name);
 
             if player.empty() {
                 let file = BufReader::new(File::open(&sp.station.path)?);
