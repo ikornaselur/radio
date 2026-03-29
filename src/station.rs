@@ -137,6 +137,17 @@ impl StationManager {
         Ok(())
     }
 
+    /// Get the station volume
+    ///
+    /// The volume scales linearly from the edge of the tuning_width towards 10% of the
+    /// tuning_width, then the volume is stable at full volume for the last 10%
+    /// This means that the inner 10% of the tuning width is "stable full volume"
+    fn get_station_volume(&self, station: &Station) -> f32 {
+        let distance = (self.dial - station.frequency).abs();
+        ((self.tuning_width - distance) / (self.tuning_width - (self.tuning_width * 0.1)))
+            .clamp(0.0, 1.0)
+    }
+
     /// Update the volume of stations
     ///
     /// This is called if the dial has moved, so that we can increase or lower volume of stations
@@ -153,8 +164,7 @@ impl StationManager {
                 None => panic!("We shouldn't be able to get here"),
             };
 
-            let distance = (self.dial - sp.station.frequency).abs();
-            let station_vol = (1.0 - distance / self.tuning_width).clamp(0.0, 1.0);
+            let station_vol = self.get_station_volume(&sp.station);
             let noise_vol = 1.0 - station_vol;
 
             player.set_volume(station_vol);
