@@ -1,7 +1,13 @@
 use anyhow::Result;
 use device_query::{DeviceQuery, DeviceState};
-use rodio::{Decoder, Player, source::noise::WhiteUniform};
-use std::{fs::File, io::BufReader, num::NonZero, thread, time::Duration};
+use rodio::{Decoder, Player, Source, source::noise::WhiteUniform};
+use std::{
+    fs::File,
+    io::BufReader,
+    num::NonZero,
+    thread,
+    time::{Duration, SystemTime},
+};
 
 struct Station<'a> {
     path: &'a str,
@@ -42,19 +48,38 @@ fn main() -> Result<()> {
     let white_noise = WhiteUniform::new(sample_rate);
     white_noise_player.append(white_noise);
 
-    // Set up stations
+    // Get the total duration for each to do offsets
+    let mut totals = vec![];
+    for station in STATIONS {
+        let buf = Decoder::try_from(BufReader::new(File::open(station.path)?))?;
+        let duration = buf.total_duration().unwrap();
+        totals.push(duration);
+    }
+
+    /*
+     * Set up stations
+     */
     let mut players = vec![];
 
-    for station in STATIONS {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs_f64();
+
+    for (station, station_duration) in STATIONS.iter().zip(totals) {
         let player = Player::connect_new(handle.mixer());
         player.set_volume(0.0);
         let file = BufReader::new(File::open(station.path)?);
-        let source = Decoder::try_from(file)?;
+        let mut source = Decoder::try_from(file)?;
+        let offset = now % station_duration.as_secs_f64();
+        source.try_seek(Duration::from_secs_f64(offset))?;
         player.append(source);
-
         players.push(player);
+        println!("Offsetting {}: {:?}", station.path, offset);
     }
 
+    /*
+     * The main loop
+     */
     loop {
         let (x, _) = device_state.get_mouse().coords;
         let dial = (x as f32 / 1800f32).clamp(0.0, 1.0);
@@ -69,6 +94,13 @@ fn main() -> Result<()> {
 
             player.set_volume(audio_vol);
             white_noise_vol = white_noise_vol.min(noise_vol);
+            // Wrap around to the start when at the end
+            if player.empty() {
+                println!("Reloading {}", station.path);
+                let file = BufReader::new(File::open(station.path)?);
+                let source = Decoder::try_from(file)?;
+                player.append(source);
+            }
         }
         white_noise_player.set_volume(white_noise_vol * WHITE_NOISE_VOL);
 
