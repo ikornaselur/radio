@@ -10,6 +10,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+const SCREEN_WIDTH: f32 = 3840.0;
+
 fn main() -> Result<()> {
     // Mouse prototype
     let device_state = DeviceState::new();
@@ -30,14 +32,6 @@ fn main() -> Result<()> {
     let white_noise = WhiteUniform::new(sample_rate);
     white_noise_player.append(white_noise);
 
-    // Get the total duration for each to do offsets
-    let mut totals = vec![];
-    for station in &stations {
-        let buf = Decoder::try_from(BufReader::new(File::open(&station.path)?))?;
-        let duration = buf.total_duration().unwrap();
-        totals.push(duration);
-    }
-
     /*
      * Set up stations
      */
@@ -45,15 +39,15 @@ fn main() -> Result<()> {
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
-        .as_secs_f64();
+        .as_secs_f32();
 
-    for (station, station_duration) in stations.iter().zip(totals) {
+    for station in stations.iter() {
         let player = Player::connect_new(handle.mixer());
         player.set_volume(0.0);
         let file = BufReader::new(File::open(&station.path)?);
         let mut source = Decoder::try_from(file)?;
-        let offset = now % station_duration.as_secs_f64();
-        source.try_seek(Duration::from_secs_f64(offset))?;
+        let offset = now % station.duration;
+        source.try_seek(Duration::from_secs_f32(offset))?;
         player.append(source);
         players.push(player);
         println!("Offsetting {}: {:?}", station.path, offset);
@@ -66,7 +60,7 @@ fn main() -> Result<()> {
     let mut last_dial = 0.;
     loop {
         let (x, _) = device_state.get_mouse().coords;
-        let dial = (x as f32 / 1800f32).clamp(0.0, 1.0);
+        let dial = (x as f32 / SCREEN_WIDTH).clamp(0.0, 1.0);
         if dial == last_dial {
             thread::sleep(Duration::from_millis((1000f32 / 60f32) as u64));
             continue;

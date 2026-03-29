@@ -1,9 +1,15 @@
+tuning_width = 0.1
+white_noise_vol = 0.3
+station_vol = 1.0
+
 [[stations]]
 name = "Foo"
 path = "/path/to/foo.mp3"
 frequency = 0.3
+duration = 3600.0
 
 [[stations]]
 name = "Bar"
 path = "/path/to/bar.mp3"
 frequency = 0.7
+duration = 2341.54

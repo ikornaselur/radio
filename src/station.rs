@@ -5,4 +5,5 @@ pub struct Station {
     pub name: String,
     pub path: String,
     pub frequency: f32,
+    pub duration: f32,
 }
