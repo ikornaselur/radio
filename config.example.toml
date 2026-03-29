@@ -1,0 +1,9 @@
+[[stations]]
+name = "Foo"
+path = "/path/to/foo.mp3"
+frequency = 0.3
+
+[[stations]]
+name = "Bar"
+path = "/path/to/bar.mp3"
+frequency = 0.7
