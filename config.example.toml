@@ -1,6 +1,4 @@
 tuning_width = 0.1
-white_noise_vol = 0.3
-station_vol = 1.0
 
 [[stations]]
 name = "Foo"

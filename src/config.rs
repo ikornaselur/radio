@@ -5,9 +5,6 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct Config {
     pub tuning_width: f32,
-    pub white_noise_vol: f32,
-    pub white_noise_sample_rate: u32,
-    pub station_vol: f32,
     pub stations: Vec<Station>,
 }
 
@@ -32,6 +29,7 @@ fn parse_config(raw: &str) -> Result<Config> {
 }
 
 pub fn load_config(path: &str) -> Result<Config> {
+    log::info!("Loading config from {}", path);
     let raw_config = std::fs::read_to_string(path)?;
     parse_config(&raw_config)
 }
@@ -44,9 +42,6 @@ mod tests {
     fn parse_config_valid() {
         let raw_config = r#"
             tuning_width = 0.05
-            white_noise_vol = 0.3
-            white_noise_sample_rate = 48000
-            station_vol = 1.0
 
             [[stations]]
             name = "Foo"
@@ -73,17 +68,12 @@ mod tests {
         assert_eq!(config.stations[1].duration, 10.0);
 
         assert_eq!(config.tuning_width, 0.05);
-        assert_eq!(config.white_noise_vol, 0.3);
-        assert_eq!(config.station_vol, 1.0);
     }
 
     #[test]
     fn validate_config_frequencies_overlap_too_much() {
         let config = Config {
             tuning_width: 0.1,
-            white_noise_vol: 0.3,
-            white_noise_sample_rate: 48_000,
-            station_vol: 1.0,
             stations: vec![
                 Station {
                     name: "Foo".into(),

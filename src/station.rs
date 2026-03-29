@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rodio::{Decoder, MixerDeviceSink, Player, Source, source::WhiteUniform};
+use rodio::{Decoder, MixerDeviceSink, Player, Source, source::Pink};
 use serde::Deserialize;
 use std::{
     fs::File,
@@ -34,8 +34,7 @@ pub struct StationManager {
     last_tick: Instant,
 
     station_players: Vec<StationPlayer>,
-    white_noise_player: Player,
-    white_noise_vol: f32,
+    static_player: Player,
 
     sink: MixerDeviceSink,
 }
@@ -45,12 +44,12 @@ impl StationManager {
         let sink = rodio::DeviceSinkBuilder::open_default_sink()?;
 
         // Set up the white noise
-        let white_noise_player = Player::connect_new(sink.mixer());
-        white_noise_player.set_volume(config.white_noise_vol);
-        let white_noise_sample_rate = NonZero::new(config.white_noise_sample_rate)
-            .ok_or(anyhow::anyhow!("Unable to create a NonZero"))?;
-        let white_noise = WhiteUniform::new(white_noise_sample_rate);
-        white_noise_player.append(white_noise);
+        let static_player = Player::connect_new(sink.mixer());
+        static_player.set_volume(0.0);
+        let static_sample_rate =
+            NonZero::new(48_000).ok_or(anyhow::anyhow!("Unable to create a NonZero"))?;
+        let noise = Pink::new(static_sample_rate);
+        static_player.append(noise);
 
         Ok(Self {
             station_players: config
@@ -67,13 +66,13 @@ impl StationManager {
             tick_interval: Duration::from_secs_f64(1.0 / 60.0),
             last_tick: Instant::now(),
             sink,
-            white_noise_player,
-            white_noise_vol: config.white_noise_vol,
+            static_player,
         })
     }
 
     pub fn tick(&mut self, dial: f32) -> Result<()> {
         if self.dial != dial {
+            log::debug!("Dial updated to {}", dial);
             self.dial = dial;
 
             let active_station_players = self.load_stations()?;
@@ -110,7 +109,10 @@ impl StationManager {
             if distance > self.tuning_width * STATION_TUNING_WIDTH_BUFFER {
                 if sp.player.is_some() && sp.inactive.is_none() {
                     // Just became inactive, so we'll set the flag for cleanup
-                    println!("{} became inactive, flagging for cleanup", sp.station.name);
+                    log::info!(
+                        "Station '{}' became inactive, flagging for cleanup",
+                        sp.station.name
+                    );
                     sp.inactive = Some(Instant::now());
                 }
                 continue;
@@ -125,7 +127,7 @@ impl StationManager {
             if sp.player.is_some() {
                 continue;
             }
-            println!("Loading {}", sp.station.name);
+            log::info!("Loading station '{}'", sp.station.name);
 
             let player = Player::connect_new(self.sink.mixer());
             player.set_volume(0.0);
@@ -150,7 +152,7 @@ impl StationManager {
             if let Some(instant) = sp.inactive
                 && instant.elapsed() > Duration::from_secs_f32(UNLOAD_STATION_BUFFER_S)
             {
-                println!("Cleaning up {}", sp.station.name);
+                log::info!("Cleaning up station '{}'", sp.station.name);
                 sp.player = None;
                 sp.inactive = None;
             }
@@ -174,7 +176,7 @@ impl StationManager {
     /// This is called if the dial has moved, so that we can increase or lower volume of stations
     /// and white noise
     fn update_volumes(&self, active_stations: &[usize]) -> Result<()> {
-        let mut white_noise_vol: f32 = 1.0;
+        let mut static_vol: f32 = 1.0;
 
         for sp in active_stations
             .iter()
@@ -186,10 +188,9 @@ impl StationManager {
             };
 
             let station_vol = self.get_station_volume(&sp.station);
-            let noise_vol = 1.0 - station_vol;
 
             player.set_volume(station_vol);
-            white_noise_vol = white_noise_vol.min(noise_vol);
+            static_vol = static_vol.min(1.0 - station_vol);
 
             if player.empty() {
                 let file = BufReader::new(File::open(&sp.station.path)?);
@@ -198,8 +199,7 @@ impl StationManager {
             }
         }
 
-        self.white_noise_player
-            .set_volume(white_noise_vol * self.white_noise_vol);
+        self.static_player.set_volume(static_vol);
 
         Ok(())
     }

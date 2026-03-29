@@ -5,6 +5,8 @@ use radio::{StationManager, load_config};
 const SCREEN_WIDTH: f32 = 3840.0;
 
 fn main() -> Result<()> {
+    env_logger::init();
+
     let config = load_config("./config.toml")?;
 
     let mut manager: StationManager = StationManager::from_config(config)?;
