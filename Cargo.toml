@@ -6,9 +6,14 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 clap = "4.6.0"
-device_query = "4.0.1"
+device_query = { version = "4.0.1", optional = true }
+display-info = { version = "0.5.9", optional = true }
 env_logger = "0.11.10"
 log = "0.4.29"
 rodio = { version = "0.22.2", features = ["noise"] }
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.0"
+
+[features]
+default = ["mouse-debug"]
+mouse-debug = ["device_query", "display-info"]
