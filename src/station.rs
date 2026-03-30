@@ -18,7 +18,6 @@ pub struct Station {
     pub name: String,
     pub path: String,
     pub frequency: f32,
-    pub duration: f64,
 }
 
 struct StationPlayer {
@@ -37,6 +36,28 @@ pub struct StationManager {
     static_player: Player,
 
     sink: MixerDeviceSink,
+}
+
+fn load_source(path: &str, seek: bool) -> Result<Decoder<BufReader<File>>> {
+    let i = Instant::now();
+    let file = BufReader::new(File::open(path)?);
+    let mut source = Decoder::try_from(file)?;
+
+    // TODO: Do we need to cache this? ~2-3 hour files take up to 100ms to load the duration of,
+    // which isn't great.. but workable.
+    if seek && let Some(duration) = source.total_duration() {
+        let offset = now()? % duration.as_secs_f64();
+        source.try_seek(Duration::from_secs_f64(offset))?;
+    }
+    log::info!("Loaded '{}' in {:?}", path, i.elapsed());
+
+    Ok(source)
+}
+
+fn now() -> Result<f64> {
+    Ok(SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs_f64())
 }
 
 impl StationManager {
@@ -96,10 +117,6 @@ impl StationManager {
     ///
     /// This lets us keep adjacent stations ready to play if the dial is turned towards them.
     fn load_stations(&mut self) -> Result<Vec<usize>> {
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_secs_f64();
-
         let mut active_stations = vec![];
 
         for (idx, sp) in self.station_players.iter_mut().enumerate() {
@@ -141,11 +158,7 @@ impl StationManager {
 
             let player = Player::connect_new(self.sink.mixer());
             player.set_volume(0.0);
-            let file = BufReader::new(File::open(&sp.station.path)?);
-            let mut source = Decoder::try_from(file)?;
-            let offset = now % sp.station.duration;
-            source.try_seek(Duration::from_secs_f64(offset))?;
-            player.append(source);
+            player.append(load_source(&sp.station.path, true)?);
             sp.player = Some(player);
         }
 
@@ -203,9 +216,7 @@ impl StationManager {
             static_vol = static_vol.min(1.0 - station_vol);
 
             if player.empty() {
-                let file = BufReader::new(File::open(&sp.station.path)?);
-                let source = Decoder::try_from(file)?;
-                player.append(source);
+                player.append(load_source(&sp.station.path, false)?);
             }
         }
 

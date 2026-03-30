@@ -47,13 +47,11 @@ mod tests {
             name = "Foo"
             path = "/path/to/foo.mp3"
             frequency = 0.3
-            duration = 123.4
 
             [[stations]]
             name = "Bar"
             path = "/path/to/bar.mp3"
             frequency = 0.7
-            duration = 10.0
         "#;
 
         let config: Config = parse_config(raw_config).unwrap();
@@ -61,11 +59,9 @@ mod tests {
 
         assert_eq!(config.stations[0].name, "Foo");
         assert_eq!(config.stations[0].frequency, 0.3);
-        assert_eq!(config.stations[0].duration, 123.4);
 
         assert_eq!(config.stations[1].name, "Bar");
         assert_eq!(config.stations[1].frequency, 0.7);
-        assert_eq!(config.stations[1].duration, 10.0);
 
         assert_eq!(config.tuning_width, 0.05);
     }
@@ -79,13 +75,11 @@ mod tests {
                     name: "Foo".into(),
                     frequency: 0.1,
                     path: "".into(),
-                    duration: 100.,
                 },
                 Station {
                     name: "bar".into(),
                     frequency: 0.19,
                     path: "".into(),
-                    duration: 100.,
                 },
             ],
         };
