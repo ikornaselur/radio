@@ -115,6 +115,16 @@ impl StationManager {
                     );
                     sp.inactive = Some(Instant::now());
                 }
+
+                // If it's outside of the buffer, we just drop the volume down to 0 immediately, if
+                // it's not already zero
+                // This is to account for dialing real fast around
+                if let Some(player) = &sp.player
+                    && player.volume() > 0.0
+                {
+                    player.set_volume(0.0);
+                }
+
                 continue;
             }
             // Station has become active again, so we'll remove the flag
