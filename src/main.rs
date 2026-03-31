@@ -3,6 +3,7 @@ use device_query::{DeviceQuery, DeviceState};
 use display_info::DisplayInfo;
 use radio::{StationManager, load_config};
 
+#[allow(clippy::cast_precision_loss)]
 fn main() -> Result<()> {
     env_logger::init();
 

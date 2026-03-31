@@ -39,17 +39,13 @@ pub struct StationManager {
 }
 
 fn load_source(path: &str, seek: bool) -> Result<Decoder<BufReader<File>>> {
-    let i = Instant::now();
     let file = BufReader::new(File::open(path)?);
     let mut source = Decoder::try_from(file)?;
 
-    // TODO: Do we need to cache this? ~2-3 hour files take up to 100ms to load the duration of,
-    // which isn't great.. but workable.
     if seek && let Some(duration) = source.total_duration() {
         let offset = now()? % duration.as_secs_f64();
         source.try_seek(Duration::from_secs_f64(offset))?;
     }
-    log::info!("Loaded '{}' in {:?}", path, i.elapsed());
 
     Ok(source)
 }
@@ -61,6 +57,7 @@ fn now() -> Result<f64> {
 }
 
 impl StationManager {
+    #[allow(clippy::missing_errors_doc)]
     pub fn from_config(config: Config) -> Result<Self> {
         let sink = rodio::DeviceSinkBuilder::open_default_sink()?;
 
@@ -91,16 +88,25 @@ impl StationManager {
         })
     }
 
+    /// Perform a 'tick'
+    ///
+    /// In each tick we update the stations and then sleep. A tick consist of:
+    ///     * Check if the dial has changed
+    ///     * If the dial changed, load stations and mark active one
+    ///     * If the dial changed, we update the volume of active stations
+    ///     * We unload stations if they've been inactive for (`UNLOAD_STATION_BUFFER_S`) seconds
+    ///     * We sleep until the next tick interval
+    #[allow(clippy::missing_errors_doc)]
     pub fn tick(&mut self, dial: f32) -> Result<()> {
-        if self.dial != dial {
-            log::debug!("Dial updated to {}", dial);
+        if (self.dial - dial).abs() > 0.001 {
+            log::debug!("Dial updated to {dial}");
             self.dial = dial;
 
             let active_station_players = self.load_stations()?;
             self.update_volumes(&active_station_players)?;
         }
         // Always unload stations
-        self.unload_stations()?;
+        self.unload_stations();
 
         // Sleep until next tick
         let sleep_time = self.tick_interval.saturating_sub(self.last_tick.elapsed());
@@ -170,7 +176,7 @@ impl StationManager {
     /// If a loaded station is outside the `STATION_TUNING_WIDTH_BUFFER` * `tuning_width`, then we
     /// start unloading them. To prevent thrashing if you move the dial quickly back and forth we
     /// keep stations in memory for `UNLOAD_STATION_BUFFER_S` seconds.
-    fn unload_stations(&mut self) -> Result<()> {
+    fn unload_stations(&mut self) {
         for sp in &mut self.station_players {
             if let Some(instant) = sp.inactive
                 && instant.elapsed() > Duration::from_secs_f32(UNLOAD_STATION_BUFFER_S)
@@ -180,13 +186,12 @@ impl StationManager {
                 sp.inactive = None;
             }
         }
-        Ok(())
     }
 
     /// Get the station volume
     ///
-    /// The volume scales linearly from the edge of the tuning_width towards 10% of the
-    /// tuning_width, then the volume is stable at full volume for the last 10%
+    /// The volume scales linearly from the edge of the `tuning_width` towards 10% of the
+    /// `tuning_width`, then the volume is stable at full volume for the last 10%
     /// This means that the inner 10% of the tuning width is "stable full volume"
     fn get_station_volume(&self, station: &Station) -> f32 {
         let distance = (self.dial - station.frequency).abs();
@@ -205,9 +210,8 @@ impl StationManager {
             .iter()
             .map(|idx| &self.station_players[*idx])
         {
-            let player = match &sp.player {
-                Some(player) => player,
-                None => panic!("We shouldn't be able to get here"),
+            let Some(player) = &sp.player else {
+                panic!("We shouldn't be able to get here");
             };
 
             let station_vol = self.get_station_volume(&sp.station);

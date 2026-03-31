@@ -11,7 +11,7 @@ pub struct Config {
 fn validate_config(config: &Config) -> Result<()> {
     // No two stations can overlap more than the tuning_width
     let mut frequencies: Vec<_> = config.stations.iter().map(|c| c.frequency).collect();
-    frequencies.sort_by(|a, b| a.total_cmp(b));
+    frequencies.sort_by(f32::total_cmp);
     for (left, right) in frequencies.windows(2).map(|w| (w[0], w[1])) {
         if left + config.tuning_width > right {
             anyhow::bail!("Two stations can't overlap more than the tuning width");
@@ -28,8 +28,9 @@ fn parse_config(raw: &str) -> Result<Config> {
     Ok(config)
 }
 
+#[allow(clippy::missing_errors_doc)]
 pub fn load_config(path: &str) -> Result<Config> {
-    log::info!("Loading config from {}", path);
+    log::info!("Loading config from {path}");
     let raw_config = std::fs::read_to_string(path)?;
     parse_config(&raw_config)
 }
