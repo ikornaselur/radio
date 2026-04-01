@@ -109,9 +109,9 @@ impl StationManager {
         self.unload_stations();
 
         // Sleep until next tick
+        self.last_tick = Instant::now();
         let sleep_time = self.tick_interval.saturating_sub(self.last_tick.elapsed());
         std::thread::sleep(sleep_time);
-        self.last_tick = Instant::now();
 
         Ok(())
     }
@@ -211,7 +211,8 @@ impl StationManager {
             .map(|idx| &self.station_players[*idx])
         {
             let Some(player) = &sp.player else {
-                panic!("We shouldn't be able to get here");
+                log::warn!("Tried to update volume on a non-existing player");
+                continue;
             };
 
             let station_vol = self.get_station_volume(&sp.station);
