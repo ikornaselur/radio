@@ -1,7 +1,13 @@
+use std::time::Duration;
+
 use anyhow::Result;
-use device_query::{DeviceQuery, DeviceState, Keycode};
-use display_info::DisplayInfo;
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    terminal::enable_raw_mode,
+};
 use radio::{StationManager, load_config};
+
+const DIAL_STEP: f32 = 0.01;
 
 #[allow(clippy::cast_precision_loss)]
 fn main() -> Result<()> {
@@ -11,23 +17,47 @@ fn main() -> Result<()> {
 
     let mut manager: StationManager = StationManager::from_config(config)?;
 
-    // We're just going to grab the first display
-    let screen_width = DisplayInfo::all()?[0].width as f32;
-    log::debug!("Screen width: {screen_width}");
-    let device_state = DeviceState::new();
+    enable_raw_mode()?;
+
     let mut dial = 0.5;
     loop {
-        // let (x, _) = device_state.get_mouse().coords;
-        // let dial = (x as f32 / screen_width).clamp(0.0, 1.0);
-        let keys = device_state.get_keys();
-
+        let mut left_held = false;
+        let mut right_held = false;
+        let mut break_out = false;
+        while event::poll(Duration::ZERO)? {
+            match event::read()? {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Left,
+                    ..
+                }) => left_held = true,
+                Event::Key(KeyEvent {
+                    code: KeyCode::Right,
+                    ..
+                }) => right_held = true,
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('q'),
+                    modifiers,
+                    ..
+                })
+                | Event::Key(KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers,
+                    ..
+                }) if modifiers.contains(KeyModifiers::CONTROL) => break_out = true,
+                _ => {}
+            }
+        }
+        if break_out {
+            return Ok(());
+        }
         let mut dial_delta = 0.0;
-        if keys.contains(&Keycode::Left) {
-            dial_delta -= 0.001;
+        if left_held {
+            dial_delta -= DIAL_STEP;
         }
-        if keys.contains(&Keycode::Right) {
-            dial_delta += 0.001;
+        if right_held {
+            dial_delta += DIAL_STEP;
         }
+
         dial += dial_delta;
 
         manager.tick(dial)?;
