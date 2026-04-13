@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    terminal::enable_raw_mode,
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
 use radio::{StationManager, load_config};
 
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
             }
         }
         if break_out {
-            return Ok(());
+            break;
         }
         let mut dial_delta = 0.0;
         if left_held {
@@ -62,4 +62,6 @@ fn main() -> Result<()> {
 
         manager.tick(dial)?;
     }
+    disable_raw_mode()?;
+    Ok(())
 }
