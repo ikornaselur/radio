@@ -8,6 +8,7 @@ use crossterm::{
 use radio::{StationManager, load_config};
 
 const DIAL_STEP: f32 = 0.01;
+const VOL_STEP: f32 = 0.01;
 
 #[allow(clippy::cast_precision_loss)]
 fn main() -> Result<()> {
@@ -20,47 +21,38 @@ fn main() -> Result<()> {
     enable_raw_mode()?;
 
     let mut dial = 0.5;
+    let mut volume = 1.0;
     loop {
-        let mut left_held = false;
-        let mut right_held = false;
-        let mut break_out = false;
+        let mut should_quit = false;
+        let mut volume_delta = 0.0;
+        let mut dial_delta = 0.0;
+
         while event::poll(Duration::ZERO)? {
-            match event::read()? {
-                Event::Key(KeyEvent {
-                    code: KeyCode::Left,
-                    ..
-                }) => left_held = true,
-                Event::Key(KeyEvent {
-                    code: KeyCode::Right,
-                    ..
-                }) => right_held = true,
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('q'),
-                    modifiers,
-                    ..
-                })
-                | Event::Key(KeyEvent {
-                    code: KeyCode::Char('c'),
-                    modifiers,
-                    ..
-                }) if modifiers.contains(KeyModifiers::CONTROL) => break_out = true,
-                _ => {}
+            if let Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) = event::read()?
+            {
+                match code {
+                    KeyCode::Left => dial_delta -= DIAL_STEP,
+                    KeyCode::Right => dial_delta += DIAL_STEP,
+                    KeyCode::Up => volume_delta += VOL_STEP,
+                    KeyCode::Down => volume_delta -= VOL_STEP,
+                    KeyCode::Char('q') => should_quit = true,
+                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        should_quit = true;
+                    }
+                    _ => {}
+                }
             }
         }
-        if break_out {
+        if should_quit {
             break;
         }
-        let mut dial_delta = 0.0;
-        if left_held {
-            dial_delta -= DIAL_STEP;
-        }
-        if right_held {
-            dial_delta += DIAL_STEP;
-        }
 
-        dial += dial_delta;
+        volume = (volume + volume_delta).clamp(0.0, 1.0);
+        dial = (dial + dial_delta).clamp(0.0, 1.0);
 
-        manager.tick(dial)?;
+        manager.tick(dial, volume)?;
     }
     disable_raw_mode()?;
     Ok(())
