@@ -8,7 +8,7 @@ use crossterm::{
 use radio::{StationManager, load_config};
 
 const DIAL_STEP: f32 = 0.01;
-const VOL_STEP: f32 = 0.01;
+const VOL_STEP: f32 = 0.05;
 
 #[allow(clippy::cast_precision_loss)]
 fn main() -> Result<()> {
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     enable_raw_mode()?;
 
     let mut dial = 0.5;
-    let mut volume = 1.0;
+    let mut volume = 0.5;
     loop {
         let mut should_quit = false;
         let mut volume_delta = 0.0;
