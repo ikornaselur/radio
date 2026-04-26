@@ -1,14 +1,9 @@
-use std::time::Duration;
-
+use ads1x1x::{Ads1x1x, DataRate16Bit, FullScaleRange, TargetAddr, channel};
 use anyhow::Result;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
+use linux_embedded_hal::I2cdev;
 use radio::{StationManager, load_config};
 
-const DIAL_STEP: f32 = 0.01;
-const VOL_STEP: f32 = 0.05;
+const MAX_DIAL: f32 = 26400.0;
 
 #[allow(clippy::cast_precision_loss)]
 fn main() -> Result<()> {
@@ -18,42 +13,23 @@ fn main() -> Result<()> {
 
     let mut manager: StationManager = StationManager::from_config(config)?;
 
-    enable_raw_mode()?;
+    let dev = I2cdev::new("/dev/i2c-1")?;
+    let mut adc = Ads1x1x::new_ads1115(dev, TargetAddr::default());
+    adc.set_full_scale_range(FullScaleRange::Within4_096V)
+        .unwrap();
+    adc.set_data_rate(DataRate16Bit::Sps128).unwrap();
+    let mut adc = adc
+        .into_continuous()
+        .map_err(|_| anyhow::anyhow!("failed to enter continuous mode"))?;
+    adc.select_channel(channel::SingleA0).unwrap();
 
-    let mut dial = 0.5;
-    let mut volume = 0.5;
+    let volume = 0.5;
     loop {
-        let mut should_quit = false;
-        let mut volume_delta = 0.0;
-        let mut dial_delta = 0.0;
-
-        while event::poll(Duration::ZERO)? {
-            if let Event::Key(KeyEvent {
-                code, modifiers, ..
-            }) = event::read()?
-            {
-                match code {
-                    KeyCode::Left => dial_delta -= DIAL_STEP,
-                    KeyCode::Right => dial_delta += DIAL_STEP,
-                    KeyCode::Up => volume_delta += VOL_STEP,
-                    KeyCode::Down => volume_delta -= VOL_STEP,
-                    KeyCode::Char('q') => should_quit = true,
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        should_quit = true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        if should_quit {
-            break;
-        }
-
-        volume = (volume + volume_delta).clamp(0.0, 1.0);
-        dial = (dial + dial_delta).clamp(0.0, 1.0);
+        // volume = (volume + volume_delta).clamp(0.0, 1.0);
+        // dial = (dial + dial_delta).clamp(0.0, 1.0);
+        let pot = adc.read().unwrap();
+        let dial = (pot as f32) / MAX_DIAL;
 
         manager.tick(dial, volume)?;
     }
-    disable_raw_mode()?;
-    Ok(())
 }

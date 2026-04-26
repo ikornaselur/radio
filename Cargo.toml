@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ads1x1x = "0.3.0"
 anyhow = "1.0.102"
 clap = "4.6.0"
 cpal = "0.17.3"
-crossterm = "0.29.0"
 env_logger = "0.11.10"
+linux-embedded-hal = "0.4.1"
 log = "0.4.29"
+nb = "1.1.0"
 rodio = { version = "0.22.2", features = ["noise"] }
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.0"
