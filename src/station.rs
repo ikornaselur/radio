@@ -60,7 +60,9 @@ fn now() -> Result<f64> {
 impl StationManager {
     #[allow(clippy::missing_errors_doc)]
     pub fn from_config(config: Config) -> Result<Self> {
-        let sink = rodio::DeviceSinkBuilder::open_default_sink()?;
+        let sink = rodio::DeviceSinkBuilder::from_default_device()?
+            .with_buffer_size(cpal::BufferSize::Fixed(4800))
+            .open_stream()?;
 
         // Set up the white noise
         let static_player = Player::connect_new(sink.mixer());
