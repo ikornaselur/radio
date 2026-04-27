@@ -28,6 +28,7 @@ struct StationPlayer {
 
 pub struct StationManager {
     dial: f32,
+    volume: f32,
     tuning_width: f32,
     tick_interval: Duration,
     last_tick: Instant,
@@ -59,7 +60,9 @@ fn now() -> Result<f64> {
 impl StationManager {
     #[allow(clippy::missing_errors_doc)]
     pub fn from_config(config: Config) -> Result<Self> {
-        let sink = rodio::DeviceSinkBuilder::open_default_sink()?;
+        let sink = rodio::DeviceSinkBuilder::from_default_device()?
+            .with_buffer_size(cpal::BufferSize::Fixed(4800))
+            .open_stream()?;
 
         // Set up the white noise
         let static_player = Player::connect_new(sink.mixer());
@@ -80,7 +83,9 @@ impl StationManager {
                 })
                 .collect(),
             dial: 0.0,
+            volume: 0.0,
             tuning_width: config.tuning_width,
+            // TODO: Move to config
             tick_interval: Duration::from_secs_f64(1.0 / 60.0),
             last_tick: Instant::now(),
             sink,
@@ -97,10 +102,11 @@ impl StationManager {
     ///     * We unload stations if they've been inactive for (`UNLOAD_STATION_BUFFER_S`) seconds
     ///     * We sleep until the next tick interval
     #[allow(clippy::missing_errors_doc)]
-    pub fn tick(&mut self, dial: f32) -> Result<()> {
-        if (self.dial - dial).abs() > 0.001 {
-            log::debug!("Dial updated to {dial}");
+    pub fn tick(&mut self, dial: f32, volume: f32) -> Result<()> {
+        if (self.dial - dial).abs() > 0.001 || (self.volume - volume).abs() > 0.001 {
+            log::debug!("Dial updated to {dial}, volume updated to {volume}");
             self.dial = dial;
+            self.volume = volume;
 
             let active_station_players = self.load_stations()?;
             self.update_volumes(&active_station_players)?;
@@ -217,7 +223,7 @@ impl StationManager {
 
             let station_vol = self.get_station_volume(&sp.station);
 
-            player.set_volume(station_vol);
+            player.set_volume(station_vol * self.volume);
             static_vol = static_vol.min(1.0 - station_vol);
 
             if player.empty() {
@@ -225,7 +231,7 @@ impl StationManager {
             }
         }
 
-        self.static_player.set_volume(static_vol);
+        self.static_player.set_volume(static_vol * self.volume);
 
         Ok(())
     }
