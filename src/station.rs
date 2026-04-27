@@ -85,6 +85,7 @@ impl StationManager {
             dial: 0.0,
             volume: 0.0,
             tuning_width: config.tuning_width,
+            // TODO: Move to config
             tick_interval: Duration::from_secs_f64(1.0 / 60.0),
             last_tick: Instant::now(),
             sink,
